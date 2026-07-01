@@ -432,11 +432,26 @@
         .attendance-table-container {
             background: var(--bg-secondary);
             border-radius: 12px;
-            padding: 20px;
+            padding: 20px 20px 0 20px;
             overflow-x: auto;
             margin-bottom: 24px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            position: relative;
         }
+        #scrollbar-helper {
+            overflow-x: auto;
+            overflow-y: hidden;
+            height: 16px;
+            position: sticky;
+            bottom: 0;
+            z-index: 20;
+            margin-top: -1px;
+            cursor: pointer;
+        }
+        #scrollbar-helper::-webkit-scrollbar { height: 12px; }
+        #scrollbar-helper::-webkit-scrollbar-track { background: var(--bg-tertiary); border-radius: 6px; }
+        #scrollbar-helper::-webkit-scrollbar-thumb { background: var(--accent-blue); border-radius: 6px; }
+        #scrollbar-helper-inner { height: 1px; }
         
         .attendance-table {
             width: 100%;
@@ -1739,6 +1754,7 @@
                     <tbody id="table-body">
                     </tbody>
                 </table>
+                <div id="scrollbar-helper"><div id="scrollbar-helper-inner"></div></div>
             </div>
 
             <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 16px;">
@@ -1880,6 +1896,12 @@
                         🔢 Auto-Renumber Students
                     </button>
                     <span style="font-size:12px; color:var(--text-secondary); flex:1;">Re-sequences roll numbers 1, 2, 3… after deletions. Attendance history stays intact.</span>
+                </div>
+                <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                    <button onclick="downloadRemovedStudentsList()" style="padding:10px 18px; background:linear-gradient(135deg,#ef4444,#b91c1c); color:white; border:none; border-radius:10px; font-weight:700; font-size:14px; cursor:pointer; display:flex; align-items:center; gap:7px;">
+                        📥 Download Removed List <span id="removed-count-badge" style="background:rgba(255,255,255,0.28); padding:1px 9px; border-radius:20px; font-size:12px; font-weight:800;">0</span>
+                    </button>
+                    <span style="font-size:12px; color:var(--text-secondary); flex:1;">Excel log of every student removed above — roll no, name, gender &amp; removal date, for your records.</span>
                 </div>
                 <p style="margin-top:10px; font-size:12px; color:var(--text-secondary);">
                     💾 Students saved to IndexedDB (persists in this browser). Upload Excel to bulk-import, or add individually above.
@@ -2123,6 +2145,15 @@
                     }
                 }
             }
+        });
+
+        // v6: Log every student removed via the Setup tab, so the list can be downloaded later
+        db.version(6).stores({
+            students: '++id, rollNo, name, gender',
+            attendance: '++id, [date+studentId], date, studentId, status, remark',
+            settings: 'key, value',
+            holidays: '++id, date, name, groupId',
+            removedStudents: '++id, rollNo, name, gender, removedAt'
         });
 
         // ═══════════════════════════════════════════════════════════════
@@ -2607,6 +2638,22 @@
         // ═══════════════════════════════════════════════════════════════
         // PREVIOUS MONTH PRESENT — looks up by studentId, so survives roll renumber
         // ═══════════════════════════════════════════════════════════════
+        async function fetchAllPreviousMonthsAttendance(year, month) {
+            // Find earliest attendance record in the database
+            const firstRecord = await db.attendance.orderBy('date').first();
+            if (!firstRecord) return new Map();
+            const earliestDate = firstRecord.date;
+            // End date is last day of month before current
+            let pY = year, pM = month - 1;
+            if (pM === 0) { pM = 12; pY--; }
+            const from = earliestDate;
+            const to   = `${pY}-${String(pM).padStart(2,'0')}-31`;
+            const records = await db.attendance.where('date').between(from, to, true, true).toArray();
+            const map = new Map();
+            records.forEach(r => map.set(`${r.date}_${r.studentId}`, r));
+            return map;
+        }
+
         async function getPrevMonthPresent(studentId, year, month, prevMonthMap) {
             // If caller passes a pre-fetched map, use it (fast path)
             if (prevMonthMap) {
@@ -2643,11 +2690,9 @@
                 return;
             }
 
-            // ✅ BATCH FETCH — current month + previous month in 2 queries
+            // ✅ BATCH FETCH — current month + all previous months in 2 queries
             const thisMonthMap = await fetchMonthAttendanceMap(year, month);
-            let pY = year, pM = month - 1;
-            if (pM === 0) { pM = 12; pY--; }
-            const prevMonthMap = await fetchMonthAttendanceMap(pY, pM);
+            const prevMonthMap = await fetchAllPreviousMonthsAttendance(year, month);
 
             const holidaysList  = await getHolidaysForMonth(year, month);
             const holidayDates  = new Set(holidaysList.map(h => h.date));
@@ -2690,7 +2735,7 @@
                     if (status === 'absent')  totalAbsent++;
                     const cellClass   = status === 'present' ? 'present' : status === 'absent' ? 'absent' : '';
                     const displayText = status === 'present' ? 'P' : status === 'absent' ? 'A' : '-';
-                    rowHTML += `<td class="day-cell ${cellClass}" onclick="toggleMonthlyAttendance('${dateStr}', ${student.id})">${displayText}</td>`;
+                    rowHTML += `<td class="day-cell ${cellClass}">${displayText}</td>`;
                 }
                 const combinePresent = totalPresent + prevMonthPresent;
                 rowHTML += `<td style="font-weight:700;color:var(--accent-green);">${totalPresent}</td>`;
@@ -2701,6 +2746,30 @@
             }
             document.getElementById('table-body').innerHTML = bodyHTML;
             calculateSummary();
+            syncScrollbarHelper();
+        }
+
+        function syncScrollbarHelper() {
+            const container = document.querySelector('.attendance-table-container');
+            const helper = document.getElementById('scrollbar-helper');
+            const inner = document.getElementById('scrollbar-helper-inner');
+            const table = document.getElementById('attendance-table');
+            if (!container || !helper || !inner || !table) return;
+            if (!helper._synced) {
+                let syncing = false;
+                helper.addEventListener('scroll', () => {
+                    if (syncing) return; syncing = true;
+                    container.scrollLeft = helper.scrollLeft;
+                    syncing = false;
+                });
+                container.addEventListener('scroll', () => {
+                    if (syncing) return; syncing = true;
+                    helper.scrollLeft = container.scrollLeft;
+                    syncing = false;
+                });
+                helper._synced = true;
+            }
+            inner.style.width = Math.max(table.scrollWidth, container.clientWidth) + 'px';
         }
 
         async function toggleMonthlyAttendance(date, studentId) {
@@ -2878,9 +2947,23 @@
 
         async function deleteStudent(id, rollNo, name) {
             if (!confirm(`Delete student "${name}" (Roll: ${rollNo})?\n\nThis will also delete ALL their attendance records.`)) return;
+
+            // Capture details before deletion so we can log them to the Removed Students list
+            const studentRecord = await db.students.get(id);
+            const attendanceCount = await db.attendance.where('studentId').equals(id).count();
+
             await db.students.delete(id);
             // Delete attendance by studentId (the stable internal key)
             await db.attendance.where('studentId').equals(id).delete();
+
+            // Log this removal so it can be downloaded later from the Setup tab
+            await db.removedStudents.add({
+                rollNo,
+                name,
+                gender: studentRecord?.gender || '',
+                attendanceRecordsRemoved: attendanceCount,
+                removedAt: new Date().toISOString()
+            });
 
             const remaining = await db.students.count();
             if (remaining > 0 && confirm(`Student deleted.\n\nDo you want to auto-renumber the remaining ${remaining} students?`)) {
@@ -2909,6 +2992,7 @@
             const container = document.getElementById('student-manager-list'); if (!container) return;
             if (!students.length) {
                 container.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:13px;">No students yet. Upload an Excel or add above.</div>`;
+                updateRemovedStudentsBadge();
                 return;
             }
             container.innerHTML = students.map(s => {
@@ -2926,6 +3010,44 @@
                     </div>
                 </div>`;
             }).join('');
+            updateRemovedStudentsBadge();
+        }
+
+        async function updateRemovedStudentsBadge() {
+            const badge = document.getElementById('removed-count-badge');
+            if (!badge) return;
+            badge.textContent = await db.removedStudents.count();
+        }
+
+        // Builds and downloads an Excel log of every student removed via the ✕ button above —
+        // roll no, name, gender, how many attendance records went with them, and when it happened.
+        async function downloadRemovedStudentsList() {
+            const removed = await db.removedStudents.orderBy('removedAt').reverse().toArray();
+            if (!removed.length) { alert('No students have been removed yet — nothing to download.'); return; }
+
+            const aoa = [
+                ['Removed Students Report'],
+                [`Generated: ${new Date().toLocaleString()}`],
+                [],
+                ['#', 'Roll No', 'Student Name', 'Gender', 'Attendance Records Removed', 'Removed On'],
+                ...removed.map((s, i) => [
+                    i + 1,
+                    s.rollNo,
+                    s.name,
+                    s.gender || '',
+                    s.attendanceRecordsRemoved ?? 0,
+                    new Date(s.removedAt).toLocaleString()
+                ])
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            ws['!cols'] = [{wch:5},{wch:10},{wch:26},{wch:10},{wch:24},{wch:20}];
+            ['A4','B4','C4','D4','E4','F4'].forEach(addr => {
+                if (ws[addr]) ws[addr].s = { font:{bold:true, color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'B91C1C'}}, alignment:{horizontal:'center'} };
+            });
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Removed Students');
+            const date = new Date().toISOString().split('T')[0];
+            XLSX.writeFile(wb, `Removed_Students_${date}.xlsx`);
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -3032,8 +3154,7 @@
             const classTitle  = getClassTitle();
             const students    = getSortedStudents(await db.students.toArray());
 
-            let pY = year, pM = month - 1; if (pM === 0) { pM = 12; pY--; }
-            const prevMonthMap  = await fetchMonthAttendanceMap(pY, pM);
+            const prevMonthMap  = await fetchAllPreviousMonthsAttendance(year, month);
             const thisMonthMap  = await fetchMonthAttendanceMap(year, month);
             const workingDays   = await getWorkingDaysForMonth(year, month);
 
@@ -3232,8 +3353,7 @@
                 const classTitle  = getClassTitle();
                 const workingDays = await getWorkingDaysForMonth(year, month);
 
-                let pY = year, pM = month - 1; if (pM === 0) { pM = 12; pY--; }
-                const prevMonthMap = await fetchMonthAttendanceMap(pY, pM);
+                const prevMonthMap = await fetchAllPreviousMonthsAttendance(year, month);
                 const thisMonthMap = await fetchMonthAttendanceMap(year, month);
 
                 // ── Accumulate totals while building per-day maxes ──────────
@@ -3425,7 +3545,8 @@
                 const attendance  = await db.attendance.toArray();
                 const holidays    = await db.holidays.toArray();
                 const settings    = await db.settings.toArray();
-                const backup = { version: 2, exportedAt: new Date().toISOString(), students, attendance, holidays, settings };
+                const removedStudents = await db.removedStudents.toArray();
+                const backup = { version: 3, exportedAt: new Date().toISOString(), students, attendance, holidays, settings, removedStudents };
                 const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -3446,7 +3567,7 @@
                     if (!backup.version || !Array.isArray(backup.students) || !Array.isArray(backup.attendance)) {
                         alert('❌ Invalid backup file.'); return;
                     }
-                    await db.students.clear(); await db.attendance.clear(); await db.holidays.clear(); await db.settings.clear();
+                    await db.students.clear(); await db.attendance.clear(); await db.holidays.clear(); await db.settings.clear(); await db.removedStudents.clear();
 
                     const stripAutoId = arr => arr.map(({ id, ...rest }) => rest);
 
@@ -3470,6 +3591,7 @@
                     }
                     if (backup.holidays?.length) await db.holidays.bulkAdd(stripAutoId(backup.holidays));
                     if (backup.settings?.length) for (const s of backup.settings) await db.settings.put({ key: s.key, value: s.value });
+                    if (backup.removedStudents?.length) await db.removedStudents.bulkAdd(stripAutoId(backup.removedStudents));
 
                     alert(`✅ Restore complete!\n\nStudents: ${backup.students.length} | Records: ${backup.attendance.length} | Holidays: ${backup.holidays?.length || 0}\n\nBackup from: ${backup.exportedAt ? new Date(backup.exportedAt).toLocaleString() : 'unknown'}`);
                     loadDailyAttendance(); renderStudentManagerList();
