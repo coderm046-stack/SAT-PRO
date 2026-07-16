@@ -2245,6 +2245,10 @@
         let currentMonth = new Date().toISOString().substring(0, 7);
 
         document.addEventListener('DOMContentLoaded', async function() {
+            // Lock screen to portrait on mobile
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('portrait').catch(() => {});
+            }
             document.getElementById('daily-date').value = currentDate;
             document.getElementById('attendance-month').value = currentMonth;
             // Set date bar label on startup
