@@ -949,6 +949,82 @@
             color: #ffffff;
         }
 
+        /* GITHUB CLOUD BACKUP */
+        .github-cloud-section {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 2px solid rgba(110,231,183,0.3);
+        }
+        .github-token-input-wrap {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .github-token-input-wrap input {
+            flex: 1;
+            min-width: 180px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1.5px solid var(--text-secondary);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+        }
+        .github-token-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            margin-top: 8px;
+        }
+        .github-token-status .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .github-token-status .dot.ok { background: #10b981; }
+        .github-token-status .dot.err { background: #ef4444; }
+        .github-token-status .dot.none { background: #6b7280; }
+        .github-btn {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .github-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+        }
+        .github-btn.do-sync {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: #fff;
+        }
+        .github-btn.do-fetch {
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            color: #fff;
+        }
+        .github-btn.do-test {
+            background: transparent;
+            color: var(--text-primary);
+            border: 1.5px solid var(--text-secondary);
+        }
+        .github-btn.do-save-token {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #fff;
+        }
+
         .backup-note {
             margin-top: 12px;
             padding: 10px 14px;
@@ -1989,6 +2065,41 @@
                 </div>
             </div>
 
+            <!-- ══ GITHUB CLOUD BACKUP ══ -->
+            <div class="github-cloud-section">
+                <h3 style="font-size:18px; font-weight:700; margin-bottom:6px; display:flex; align-items:center; gap:10px;">
+                    <i class="fab fa-github" style="color:#10b981;"></i> GitHub Cloud Backup
+                    <span style="font-size:12px; font-weight:500; color:var(--text-secondary);">Auto-sync to cloud</span>
+                </h3>
+                <p style="font-size:13px; color:var(--text-secondary); margin-bottom:14px;">
+                    Your data is automatically backed up to a <strong>private GitHub Gist</strong> every time you close the app. 
+                    On next open, you can restore with one click — from any device.
+                </p>
+
+                <div class="github-token-input-wrap">
+                    <input type="password" id="github-token-input" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" spellcheck="false">
+                    <button class="github-btn do-save-token" onclick="saveGithubToken()"><i class="fas fa-save"></i> Save Token</button>
+                    <button class="github-btn do-test" onclick="testGithubToken()"><i class="fas fa-plug"></i> Test</button>
+                </div>
+
+                <div class="github-token-status" id="github-token-status">
+                    <span class="dot none" id="github-status-dot"></span>
+                    <span id="github-status-text">No token configured</span>
+                </div>
+
+                <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">
+                    <button class="github-btn do-sync" onclick="syncToGist()">
+                        <i class="fas fa-cloud-upload-alt"></i> Sync to Cloud
+                    </button>
+                    <button class="github-btn do-fetch" onclick="restoreFromGist()">
+                        <i class="fas fa-cloud-download-alt"></i> Restore from Cloud
+                    </button>
+                </div>
+                <div style="font-size:12px; color:var(--text-secondary); margin-top:10px;">
+                    <i class="fas fa-history"></i> Last sync: <span id="last-gist-sync">Never</span>
+                </div>
+            </div>
+
             <div style="background: var(--bg-secondary); padding: 20px; border-radius: 12px; margin-bottom: 16px;">
                 <h3 style="margin-bottom: 12px; font-size: 18px; font-weight: 700;">
                     <i class="fas fa-info-circle"></i> Instructions
@@ -2162,9 +2273,6 @@
         async function cloudSaveAttendance() {}
         async function cloudDeleteAttendance() {}
         async function cloudSaveStudents() {}
-        async function cloudClearDay() {}
-        async function syncFromCloud() {}
-
         // ═══════════════════════════════════════════════════════════════
         // DATABASE SETUP — v5 uses stable studentId (not rollNo) for attendance
         // This means roll number changes NEVER corrupt historical data
@@ -2347,12 +2455,152 @@
             document.getElementById('auto-backup-banner').style.display = 'none';
         }
 
+        // ═══════════════════════════════════════════════════════════════
+        // GITHUB GIST CLOUD SYNC
+        // ═══════════════════════════════════════════════════════════════
+        const GIST_FILENAME = 'sat-pro-backup.json';
+
+        async function getGithubToken() {
+            const entry = await db.settings.get('githubToken');
+            return entry ? entry.value : null;
+        }
+
+        async function getGistId() {
+            const entry = await db.settings.get('gistId');
+            return entry ? entry.value : null;
+        }
+
+        async function saveGithubToken() {
+            const token = document.getElementById('github-token-input').value.trim();
+            if (!token) { alert('Enter your GitHub token first.'); return; }
+            await db.settings.put({ key: 'githubToken', value: token });
+            document.getElementById('github-token-input').value = '';
+            await testGithubToken();
+        }
+
+        async function testGithubToken() {
+            const token = await getGithubToken();
+            const dot = document.getElementById('github-status-dot');
+            const text = document.getElementById('github-status-text');
+            if (!token) {
+                dot.className = 'dot none';
+                text.textContent = 'No token configured';
+                return;
+            }
+            try {
+                const res = await fetch('https://api.github.com/user', {
+                    headers: { 'Authorization': 'token ' + token, 'Accept': 'application/vnd.github.v3+json' }
+                });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const user = await res.json();
+                dot.className = 'dot ok';
+                text.textContent = 'Connected as ' + user.login;
+            } catch (e) {
+                dot.className = 'dot err';
+                text.textContent = 'Connection failed — check your token';
+            }
+        }
+
+        async function syncToGist(silent) {
+            const token = await getGithubToken();
+            if (!token) { if (!silent) alert('Configure your GitHub token first in the Setup tab.'); return; }
+
+            const students    = await db.students.toArray();
+            const attendance  = await db.attendance.toArray();
+            const holidays    = await db.holidays.toArray();
+            const settings    = await db.settings.toArray();
+            const removedStudents = await db.removedStudents.toArray();
+            const backup = { version: 3, exportedAt: new Date().toISOString(), students, attendance, holidays, settings, removedStudents };
+            const content = JSON.stringify(backup, null, 2);
+
+            try {
+                let gistId = await getGistId();
+                let res;
+                if (gistId) {
+                    res = await fetch('https://api.github.com/gists/' + gistId, {
+                        method: 'PATCH',
+                        headers: { 'Authorization': 'token ' + token, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ files: { [GIST_FILENAME]: { content: content } } })
+                    });
+                } else {
+                    res = await fetch('https://api.github.com/gists', {
+                        method: 'POST',
+                        headers: { 'Authorization': 'token ' + token, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ public: false, files: { [GIST_FILENAME]: { content: content } } })
+                    });
+                }
+                if (!res.ok) throw new Error('GitHub API error: HTTP ' + res.status);
+                const gist = await res.json();
+                if (!gistId) {
+                    await db.settings.put({ key: 'gistId', value: gist.id });
+                }
+                const now = new Date().toLocaleString();
+                await db.settings.put({ key: 'lastGistSync', value: now });
+                document.getElementById('last-gist-sync').textContent = now;
+                if (!silent) alert('✅ Synced to cloud! Backup saved to your private GitHub Gist.');
+            } catch (e) {
+                if (!silent) alert('❌ Sync failed: ' + e.message);
+            }
+        }
+
+        async function restoreFromGist() {
+            const token = await getGithubToken();
+            if (!token) { alert('Configure your GitHub token first.'); return; }
+            const gistId = await getGistId();
+            if (!gistId) { alert('No cloud backup found. Sync to cloud first.'); return; }
+            if (!confirm('⚠️ Restore from cloud will REPLACE all current data. Continue?')) return;
+
+            try {
+                const res = await fetch('https://api.github.com/gists/' + gistId, {
+                    headers: { 'Authorization': 'token ' + token, 'Accept': 'application/vnd.github.v3+json' }
+                });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const gist = await res.json();
+                const raw = gist.files[GIST_FILENAME];
+                if (!raw) throw new Error('Backup file not found in gist');
+                const backup = JSON.parse(raw.content);
+                if (!backup.version || !Array.isArray(backup.students) || !Array.isArray(backup.attendance)) {
+                    alert('❌ Invalid backup in cloud.'); return;
+                }
+                await db.students.clear(); await db.attendance.clear(); await db.holidays.clear();
+                await db.settings.clear(); await db.removedStudents.clear();
+                const stripAutoId = arr => arr.map(({ id, ...rest }) => rest);
+                if (backup.students.length) await db.students.bulkPut(backup.students);
+                if (backup.attendance.length) {
+                    const isOldFormat = backup.attendance[0].rollNo !== undefined && backup.attendance[0].studentId === undefined;
+                    if (isOldFormat) {
+                        const rollNoToId = {};
+                        backup.students.forEach(s => { rollNoToId[s.rollNo] = s.id; });
+                        const migrated = backup.attendance
+                            .map(a => ({ date: a.date, studentId: rollNoToId[a.rollNo], status: a.status, remark: a.remark }))
+                            .filter(a => a.studentId !== undefined);
+                        if (migrated.length) await db.attendance.bulkAdd(migrated);
+                    } else {
+                        await db.attendance.bulkAdd(stripAutoId(backup.attendance));
+                    }
+                }
+                if (backup.holidays?.length) await db.holidays.bulkAdd(stripAutoId(backup.holidays));
+                if (backup.settings?.length) for (const s of backup.settings) await db.settings.put({ key: s.key, value: s.value });
+                if (backup.removedStudents?.length) await db.removedStudents.bulkAdd(stripAutoId(backup.removedStudents));
+                alert('✅ Restore from cloud complete!\n\nStudents: ' + backup.students.length + ' | Records: ' + backup.attendance.length + ' | Holidays: ' + (backup.holidays?.length || 0));
+                loadDailyAttendance(); renderStudentManagerList();
+            } catch (e) {
+                alert('❌ Restore from cloud failed: ' + e.message);
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', async function() {
             lockPortrait();
             window.addEventListener('resize', handleOrientationChange);
             handleOrientationChange();
             checkAutoBackup();
-            window.addEventListener('pagehide', saveAutoBackup);
+            testGithubToken();
+            const lastSync = await db.settings.get('lastGistSync');
+            if (lastSync) document.getElementById('last-gist-sync').textContent = lastSync.value;
+            window.addEventListener('pagehide', function() {
+                saveAutoBackup();
+                syncToGist(true);
+            });
             document.getElementById('daily-date').value = currentDate;
             document.getElementById('attendance-month').value = currentMonth;
             // Set date bar label on startup
