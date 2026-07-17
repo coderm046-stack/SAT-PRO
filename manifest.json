@@ -1,6 +1,6 @@
 {
-  "name": "Student Attendance Tracker V2.0",
-  "short_name": "SAT V2.0",
+  "name": "Student Attendance Tracker PRO",
+  "short_name": "SAT PRO",
   "description": "Track and manage student attendance efficiently",
   "start_url": "./index.html",
   "display": "standalone",
@@ -31,5 +31,5 @@
   "categories": ["education", "productivity"],
   "lang": "en-US",
   "dir": "ltr",
-  "version": "2.5"
+  "version": "3.0"
 }

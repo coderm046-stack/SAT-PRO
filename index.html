@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1a1a2e">
-    <meta name="description" content="Student Attendance Tracker PWA">
-    <title>Attendance Tracker</title>
+    <meta name="description" content="Student Attendance Tracker PRO PWA">
+    <title>Attendance Tracker PRO</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icon.png" type="image/png">
     
@@ -1544,6 +1544,18 @@
     </style>
 </head>
 <body>
+    <div id="auto-backup-banner">
+        <div class="backup-msg">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <span>Auto-backup available from <strong class="backup-timestamp"></strong></span>
+        </div>
+        <div class="backup-actions">
+            <button class="btn-download" onclick="downloadAutoBackup()"><i class="fas fa-download"></i> Download</button>
+            <button class="btn-restore-banner" onclick="restoreAutoBackup()"><i class="fas fa-undo"></i> Restore</button>
+            <button class="btn-dismiss" onclick="dismissAutoBackup()"><i class="fas fa-times"></i></button>
+        </div>
+    </div>
+
     <!-- Theme Toggle (For Monthly/Setup tabs) -->
     <button class="theme-toggle" id="main-theme-toggle" onclick="toggleTheme()" style="display: none;">
         <i class="fas fa-moon" id="theme-icon"></i>
@@ -1552,7 +1564,7 @@
     <!-- Daily Attendance Tab -->
     <div id="tab-daily" class="tab-content active daily-view">
         <div class="daily-top-header">
-            <div class="daily-app-title">SAT V2.0</div>
+            <div class="daily-app-title">SAT PRO</div>
             <div class="daily-app-subtitle">Class Teacher's App</div>
             <button class="daily-theme-toggle" onclick="toggleTheme()">
                 <i class="fas fa-moon" id="daily-theme-icon"></i>
@@ -1680,7 +1692,7 @@
     <div id="tab-monthly" class="tab-content">
         <div class="container">
             <div class="header">
-                <h1><i class="fas fa-graduation-cap"></i> Student Attendance Tracker</h1>
+                <h1><i class="fas fa-graduation-cap"></i> SAT PRO</h1>
                 <p style="opacity: 0.9; font-size: 14px; margin-top: 4px;">Track and manage student attendance efficiently</p>
                 <div class="btn-group">
                     <button class="btn btn-install" id="install-btn" style="display: none;">
@@ -2261,10 +2273,86 @@
             }
         }
 
+        async function saveAutoBackup() {
+            try {
+                const students    = await db.students.toArray();
+                const attendance  = await db.attendance.toArray();
+                const holidays    = await db.holidays.toArray();
+                const settings    = await db.settings.toArray();
+                const removedStudents = await db.removedStudents.toArray();
+                const backup = { version: 3, exportedAt: new Date().toISOString(), students, attendance, holidays, settings, removedStudents };
+                await db.settings.put({ key: 'autoBackup', value: JSON.stringify(backup) });
+            } catch (e) { /* silent */ }
+        }
+
+        async function checkAutoBackup() {
+            try {
+                const entry = await db.settings.get('autoBackup');
+                if (!entry) return;
+                const backup = JSON.parse(entry.value);
+                document.querySelector('#auto-backup-banner .backup-timestamp').textContent =
+                    backup.exportedAt ? new Date(backup.exportedAt).toLocaleString() : 'unknown date';
+                document.getElementById('auto-backup-banner').style.display = 'flex';
+            } catch (e) { /* silent */ }
+        }
+
+        async function downloadAutoBackup() {
+            try {
+                const entry = await db.settings.get('autoBackup');
+                if (!entry) return;
+                const blob = new Blob([entry.value], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = `SAT_Backup_${new Date().toISOString().split('T')[0]}.json`; a.click();
+                URL.revokeObjectURL(url);
+            } catch (e) { alert('Download failed: ' + e.message); }
+        }
+
+        async function restoreAutoBackup() {
+            try {
+                const entry = await db.settings.get('autoBackup');
+                if (!entry) return;
+                const backup = JSON.parse(entry.value);
+                if (!backup.version || !Array.isArray(backup.students) || !Array.isArray(backup.attendance)) {
+                    alert('❌ Invalid auto-backup.'); return;
+                }
+                if (!confirm('⚠️ Restore will REPLACE all current data. Continue?')) return;
+                await db.students.clear(); await db.attendance.clear(); await db.holidays.clear();
+                await db.settings.clear(); await db.removedStudents.clear();
+                const stripAutoId = arr => arr.map(({ id, ...rest }) => rest);
+                if (backup.students.length) await db.students.bulkPut(backup.students);
+                if (backup.attendance.length) {
+                    const isOldFormat = backup.attendance[0].rollNo !== undefined && backup.attendance[0].studentId === undefined;
+                    if (isOldFormat) {
+                        const rollNoToId = {};
+                        backup.students.forEach(s => { rollNoToId[s.rollNo] = s.id; });
+                        const migrated = backup.attendance
+                            .map(a => ({ date: a.date, studentId: rollNoToId[a.rollNo], status: a.status, remark: a.remark }))
+                            .filter(a => a.studentId !== undefined);
+                        if (migrated.length) await db.attendance.bulkAdd(migrated);
+                    } else {
+                        await db.attendance.bulkAdd(stripAutoId(backup.attendance));
+                    }
+                }
+                if (backup.holidays?.length) await db.holidays.bulkAdd(stripAutoId(backup.holidays));
+                if (backup.settings?.length) for (const s of backup.settings) await db.settings.put({ key: s.key, value: s.value });
+                if (backup.removedStudents?.length) await db.removedStudents.bulkAdd(stripAutoId(backup.removedStudents));
+                alert(`✅ Restore complete!\n\nStudents: ${backup.students.length} | Records: ${backup.attendance.length} | Holidays: ${backup.holidays?.length || 0}\n\nBackup from: ${backup.exportedAt ? new Date(backup.exportedAt).toLocaleString() : 'unknown'}`);
+                loadDailyAttendance(); renderStudentManagerList();
+                dismissAutoBackup();
+            } catch (e) { alert('❌ Restore failed: ' + e.message); }
+        }
+
+        function dismissAutoBackup() {
+            document.getElementById('auto-backup-banner').style.display = 'none';
+        }
+
         document.addEventListener('DOMContentLoaded', async function() {
             lockPortrait();
             window.addEventListener('resize', handleOrientationChange);
             handleOrientationChange();
+            checkAutoBackup();
+            window.addEventListener('pagehide', saveAutoBackup);
             document.getElementById('daily-date').value = currentDate;
             document.getElementById('attendance-month').value = currentMonth;
             // Set date bar label on startup
@@ -4666,6 +4754,62 @@
   @keyframes rotate-device {
     0%, 100% { transform: rotate(0deg); }
     50% { transform: rotate(90deg); }
+  }
+
+  #auto-backup-banner {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 16px;
+    background: linear-gradient(135deg, #065f46, #047857);
+    color: #fff;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    position: sticky;
+    top: 0;
+    z-index: 9999;
+    flex-wrap: wrap;
+  }
+  #auto-backup-banner .backup-msg {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 160px;
+  }
+  #auto-backup-banner .backup-msg i {
+    font-size: 18px;
+  }
+  #auto-backup-banner .backup-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  #auto-backup-banner .backup-actions button {
+    padding: 5px 12px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  #auto-backup-banner .backup-actions button:hover {
+    opacity: 0.85;
+  }
+  #auto-backup-banner .btn-download {
+    background: #fff;
+    color: #065f46;
+  }
+  #auto-backup-banner .btn-restore-banner {
+    background: #fbbf24;
+    color: #1e293b;
+  }
+  #auto-backup-banner .btn-dismiss {
+    background: transparent;
+    color: rgba(255,255,255,0.8);
+    padding: 5px 8px !important;
   }
 </style>
 </head>

@@ -3,7 +3,7 @@
 // Bump the version string below whenever you update index.html so the
 // browser detects the change, installs the new SW, and serves fresh files.
 // ─────────────────────────────────────────────────────────────────────────────
-const VERSION    = 'sat-v2.5';          // ← change this on every new release
+const VERSION    = 'sat-pro-v1.0';          // ← change this on every new release
 const CACHE_NAME = `attendance-${VERSION}`;
 
 const PRECACHE = [
