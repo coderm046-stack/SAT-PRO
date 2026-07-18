@@ -2604,15 +2604,16 @@
             }
             try {
                 const res = await fetch('https://api.github.com/user', {
-                    headers: { 'Authorization': 'token ' + token, 'Accept': 'application/vnd.github.v3+json' }
+                    headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github.v3+json' }
                 });
-                if (!res.ok) throw new Error('HTTP ' + res.status);
+                if (res.status === 401) throw new Error('Token rejected (401) — it may have expired');
+                if (!res.ok) throw new Error('GitHub API error (HTTP ' + res.status + ')');
                 const user = await res.json();
                 dot.className = 'dot ok';
                 text.textContent = 'Connected as ' + user.login;
             } catch (e) {
                 dot.className = 'dot err';
-                text.textContent = 'Connection failed — check your token';
+                text.textContent = e.message.includes('Token rejected') ? e.message : ('Connection failed — ' + e.message);
             }
         }
 
@@ -2634,13 +2635,13 @@
                 if (gistId) {
                     res = await fetch('https://api.github.com/gists/' + gistId, {
                         method: 'PATCH',
-                        headers: { 'Authorization': 'token ' + token, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+                        headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
                         body: JSON.stringify({ files: { [GIST_FILENAME]: { content: content } } })
                     });
                 } else {
                     res = await fetch('https://api.github.com/gists', {
                         method: 'POST',
-                        headers: { 'Authorization': 'token ' + token, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+                        headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
                         body: JSON.stringify({ public: false, files: { [GIST_FILENAME]: { content: content } } })
                     });
                 }
@@ -2667,7 +2668,7 @@
 
             try {
                 const res = await fetch('https://api.github.com/gists/' + gistId, {
-                    headers: { 'Authorization': 'token ' + token, 'Accept': 'application/vnd.github.v3+json' }
+                    headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github.v3+json' }
                 });
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const gist = await res.json();
