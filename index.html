@@ -2093,21 +2093,42 @@
                     </button>
                     <span style="font-size:12px; color:var(--text-secondary); flex:1;">Excel log of every student removed above — roll no, name, gender &amp; removal date, for your records.</span>
                 </div>
-                <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-                    <button onclick="downloadAllRemarks()" style="padding:10px 18px; background:linear-gradient(135deg,#8b5cf6,#6d28d9); color:white; border:none; border-radius:10px; font-weight:700; font-size:14px; cursor:pointer; display:flex; align-items:center; gap:7px;">
-                        📋 Remarks → Excel
-                    </button>
-                    <button onclick="downloadAllRemarksPDF()" style="padding:10px 18px; background:linear-gradient(135deg,#f97316,#ea580c); color:white; border:none; border-radius:10px; font-weight:700; font-size:14px; cursor:pointer; display:flex; align-items:center; gap:7px;">
-                        📋 Remarks → PDF
-                    </button>
-                    <span style="font-size:12px; color:var(--text-secondary); flex:1;">Every remark ever entered for all students, grouped by student then by date (newest first).</span>
-                </div>
                 <p style="margin-top:10px; font-size:12px; color:var(--text-secondary);">
                     💾 Students saved to IndexedDB (persists in this browser). Upload Excel to bulk-import, or add individually above.
                 </p>
                 </div>
             </div>
             
+            <!-- ══ REMARKS ══ -->
+            <div class="setup-collapse-card accent-indigo">
+                <div class="setup-collapse-header" id="setup-remarks-header" onclick="toggleSetupCard('setup-remarks')">
+                    <h3>
+                        <i class="fas fa-comment-dots" style="color:#8b5cf6;"></i> Remarks
+                        <span style="font-size:12px; font-weight:500; color:var(--text-secondary);">Download by date range</span>
+                    </h3>
+                    <i class="fas fa-chevron-down toggle-arrow"></i>
+                </div>
+                <div class="setup-collapse-body" id="setup-remarks-body">
+                    <p style="font-size:13px; color:var(--text-secondary); margin-bottom:14px;">
+                        Select a date range to download all student remarks for that period.
+                    </p>
+                    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:14px;">
+                        <label style="font-size:13px; font-weight:600; color:var(--text-secondary);">From</label>
+                        <input type="date" id="remarks-date-from" style="padding:10px 12px; border-radius:10px; border:2px solid rgba(139,92,246,0.25); background:var(--bg-tertiary); color:var(--text-primary); font-size:14px;">
+                        <label style="font-size:13px; font-weight:600; color:var(--text-secondary); margin-left:8px;">To</label>
+                        <input type="date" id="remarks-date-to" style="padding:10px 12px; border-radius:10px; border:2px solid rgba(139,92,246,0.25); background:var(--bg-tertiary); color:var(--text-primary); font-size:14px;">
+                    </div>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                        <button onclick="downloadRemarksByDateRangeExcel()" style="padding:10px 18px; background:linear-gradient(135deg,#8b5cf6,#6d28d9); color:white; border:none; border-radius:10px; font-weight:700; font-size:14px; cursor:pointer; display:flex; align-items:center; gap:7px;">
+                            📋 Remarks → Excel
+                        </button>
+                        <button onclick="downloadRemarksByDateRangePDF()" style="padding:10px 18px; background:linear-gradient(135deg,#f97316,#ea580c); color:white; border:none; border-radius:10px; font-weight:700; font-size:14px; cursor:pointer; display:flex; align-items:center; gap:7px;">
+                            📋 Remarks → PDF
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- ══ BACKUP & RESTORE ══ -->
             <div class="setup-collapse-card accent-indigo">
                 <div class="setup-collapse-header" id="setup-backup-header" onclick="toggleSetupCard('setup-backup')">
@@ -2692,6 +2713,16 @@
             document.getElementById('attendance-month').value = currentMonth;
             // Set date bar label on startup
             updateDateBarLabel(currentDate);
+            // Set default date range for Remarks card
+            (function() {
+                const d = new Date();
+                const first = new Date(d.getFullYear(), d.getMonth(), 1);
+                const fmt = x => x.toISOString().split('T')[0];
+                const from = document.getElementById('remarks-date-from');
+                const to   = document.getElementById('remarks-date-to');
+                if (from) from.value = fmt(first);
+                if (to)   to.value   = fmt(d);
+            })();
 
             const savedTheme = localStorage.getItem('theme') || 'dark';
             if (savedTheme === 'light') {
@@ -3712,6 +3743,171 @@
 
             } catch (err) {
                 console.error('PDF remarks export error:', err);
+                alert('PDF export failed:\n' + err.message + '\n\nPlease refresh and try again.');
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // DOWNLOAD REMARKS BY DATE RANGE (Excel)
+        // ═══════════════════════════════════════════════════════════════
+        async function downloadRemarksByDateRangeExcel() {
+            const fromDate = document.getElementById('remarks-date-from').value;
+            const toDate   = document.getElementById('remarks-date-to').value;
+            if (!fromDate || !toDate) { alert('Please select both From and To dates.'); return; }
+            if (fromDate > toDate) { alert('From date must be before or equal to To date.'); return; }
+
+            const students = getSortedStudents(await db.students.toArray());
+            if (!students.length) { alert('No students found.'); return; }
+
+            const allRecords = await db.attendance
+                .where('date').between(fromDate, toDate, true, true)
+                .filter(r => r.remark && r.remark.trim() !== '')
+                .toArray();
+            if (!allRecords.length) { alert('No remarks found in the selected date range.'); return; }
+
+            const byStudent = {};
+            for (const r of allRecords) {
+                if (!byStudent[r.studentId]) byStudent[r.studentId] = [];
+                byStudent[r.studentId].push(r);
+            }
+
+            const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+            const headerRow = ['Roll No','Student Name','Gender','Date','Day','Status','Remark'];
+            const data = [headerRow];
+
+            for (const student of students) {
+                const records = byStudent[student.id] || [];
+                if (!records.length) continue;
+                records.sort((a, b) => b.date.localeCompare(a.date));
+                for (const r of records) {
+                    const d = new Date(r.date + 'T00:00:00');
+                    const day = days[d.getDay()];
+                    const dd = String(d.getDate()).padStart(2,'0');
+                    const mm = String(d.getMonth()+1).padStart(2,'0');
+                    const yyyy = d.getFullYear();
+                    const dateLabel = `${dd}-${mm}-${yyyy}`;
+                    const status = r.status === 'present' ? 'Present' : r.status === 'absent' ? 'Absent' : '-';
+                    data.push([student.rollNo, student.name, student.gender, dateLabel, day, status, r.remark]);
+                }
+            }
+
+            if (data.length === 1) { alert('No remarks found.'); return; }
+
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            ws['!cols'] = [{wch:10},{wch:28},{wch:10},{wch:14},{wch:8},{wch:12},{wch:40}];
+            const headerRange = XLSX.utils.decode_range(ws['!ref']);
+            for (let c = headerRange.s.c; c <= headerRange.e.c; c++) {
+                const addr = XLSX.utils.encode_cell({r:0, c});
+                if (ws[addr]) ws[addr].s = { font:{bold:true, color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'7C3AED'}}, alignment:{horizontal:'center'} };
+            }
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Remarks Range');
+            XLSX.writeFile(wb, `Remarks_${fromDate}_to_${toDate}.xlsx`);
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // DOWNLOAD REMARKS BY DATE RANGE (PDF)
+        // ═══════════════════════════════════════════════════════════════
+        async function downloadRemarksByDateRangePDF() {
+            const fromDate = document.getElementById('remarks-date-from').value;
+            const toDate   = document.getElementById('remarks-date-to').value;
+            if (!fromDate || !toDate) { alert('Please select both From and To dates.'); return; }
+            if (fromDate > toDate) { alert('From date must be before or equal to To date.'); return; }
+
+            try {
+                let JsPDF = null;
+                if (window.jspdf && typeof window.jspdf.jsPDF === 'function') {
+                    JsPDF = window.jspdf.jsPDF;
+                } else if (typeof window.jsPDF === 'function') {
+                    JsPDF = window.jsPDF;
+                } else if (window.jsPDF && typeof window.jsPDF.jsPDF === 'function') {
+                    JsPDF = window.jsPDF.jsPDF;
+                }
+                if (!JsPDF) { alert('PDF library not loaded yet. Please wait a moment and try again.'); return; }
+
+                const doc = new JsPDF('p', 'mm', 'a4');
+                if (typeof doc.autoTable !== 'function') {
+                    alert('PDF table plugin (AutoTable) not loaded. Please refresh the page and try again.'); return;
+                }
+
+                const students = getSortedStudents(await db.students.toArray());
+                if (!students.length) { alert('No students found.'); return; }
+
+                const allRecords = await db.attendance
+                    .where('date').between(fromDate, toDate, true, true)
+                    .filter(r => r.remark && r.remark.trim() !== '')
+                    .toArray();
+                if (!allRecords.length) { alert('No remarks found in the selected date range.'); return; }
+
+                const byStudent = {};
+                for (const r of allRecords) {
+                    if (!byStudent[r.studentId]) byStudent[r.studentId] = [];
+                    byStudent[r.studentId].push(r);
+                }
+
+                const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                const tableData = [];
+                const studentNames = [];
+
+                for (const student of students) {
+                    const records = byStudent[student.id] || [];
+                    if (!records.length) continue;
+                    records.sort((a, b) => b.date.localeCompare(a.date));
+                    studentNames.push(student);
+                    for (const r of records) {
+                        const d = new Date(r.date + 'T00:00:00');
+                        const day = days[d.getDay()];
+                        const dd = String(d.getDate()).padStart(2,'0');
+                        const mm = String(d.getMonth()+1).padStart(2,'0');
+                        const yyyy = d.getFullYear();
+                        const dateLabel = `${dd}-${mm}-${yyyy}`;
+                        const status = r.status === 'present' ? 'Present' : r.status === 'absent' ? 'Absent' : '-';
+                        tableData.push([student.rollNo, student.name, student.gender, dateLabel, day, status, r.remark]);
+                    }
+                }
+
+                if (!tableData.length) { alert('No remarks found.'); return; }
+
+                const headers = [['Roll No','Student Name','Gender','Date','Day','Status','Remark']];
+                const pageW = doc.internal.pageSize.getWidth();
+                const today = new Date();
+                const todayStr = `${String(today.getDate()).padStart(2,'0')}-${String(today.getMonth()+1).padStart(2,'0')}-${today.getFullYear()}`;
+
+                doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
+                doc.text('Remarks Report — ' + fromDate + ' to ' + toDate, 14, 14);
+                doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 100, 100);
+                doc.text(`Generated: ${todayStr}  |  Total remarks: ${tableData.length}  |  Total students: ${studentNames.length}`, 14, 20);
+
+                doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.3);
+                doc.line(14, 23, pageW - 14, 23);
+                doc.setTextColor(0, 0, 0);
+
+                doc.autoTable({
+                    head: headers,
+                    body: tableData,
+                    startY: 26,
+                    theme: 'grid',
+                    styles: { fontSize: 7, cellPadding: 1.5, halign: 'center', valign: 'middle', overflow: 'linebreak' },
+                    headStyles: { fillColor: [124, 58, 237], fontStyle: 'bold', fontSize: 7, halign: 'center' },
+                    columnStyles: {
+                        0: { cellWidth: 14, halign: 'center' },
+                        1: { cellWidth: 28, halign: 'left' },
+                        2: { cellWidth: 14, halign: 'center' },
+                        3: { cellWidth: 18, halign: 'center' },
+                        4: { cellWidth: 12, halign: 'center' },
+                        5: { cellWidth: 14, halign: 'center' },
+                        6: { cellWidth: 'auto', halign: 'left' }
+                    },
+                    didParseCell(data) {
+                        if (data.row.section !== 'body') return;
+                        if (data.column.index === 6) data.cell.styles.halign = 'left';
+                    }
+                });
+
+                doc.save(`Remarks_${fromDate}_to_${toDate}.pdf`);
+
+            } catch (err) {
+                console.error('PDF date-range remarks export error:', err);
                 alert('PDF export failed:\n' + err.message + '\n\nPlease refresh and try again.');
             }
         }
