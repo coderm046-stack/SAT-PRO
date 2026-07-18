@@ -9,7 +9,6 @@ const CACHE_NAME = `attendance-${VERSION}`;
 const PRECACHE = [
   './index.html',
   './manifest.json',
-  './icon.png',
   './icon-192x192.png',
   './icon-512x512.png',
   './apple-touch-icon.png',

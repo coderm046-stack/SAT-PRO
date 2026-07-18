@@ -21,13 +21,7 @@
       "purpose": "any maskable"
     }
   ],
-  "screenshots": [
-    {
-      "src": "icon.png",
-      "sizes": "540x720",
-      "type": "image/png"
-    }
-  ],
+  "screenshots": [],
   "categories": ["education", "productivity"],
   "lang": "en-US",
   "dir": "ltr",
