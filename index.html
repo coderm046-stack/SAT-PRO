@@ -2549,7 +2549,10 @@
                     }
                 }
                 if (backup.holidays?.length) await db.holidays.bulkAdd(stripAutoId(backup.holidays));
-                if (backup.settings?.length) for (const s of backup.settings) await db.settings.put({ key: s.key, value: s.value });
+                if (backup.settings?.length) for (const s of backup.settings) {
+                    if (s.key === 'githubToken' || s.key === 'gistId') continue;
+                    await db.settings.put({ key: s.key, value: s.value });
+                }
                 if (backup.removedStudents?.length) await db.removedStudents.bulkAdd(stripAutoId(backup.removedStudents));
                 alert(`✅ Restore complete!\n\nStudents: ${backup.students.length} | Records: ${backup.attendance.length} | Holidays: ${backup.holidays?.length || 0}\n\nBackup from: ${backup.exportedAt ? fmtDateTime(new Date(backup.exportedAt)) : 'unknown'}`);
                 loadDailyAttendance(); renderStudentManagerList();
@@ -2626,7 +2629,8 @@
             const holidays    = await db.holidays.toArray();
             const settings    = await db.settings.toArray();
             const removedStudents = await db.removedStudents.toArray();
-            const backup = { version: 3, exportedAt: new Date().toISOString(), students, attendance, holidays, settings, removedStudents };
+            const cleanSettings = settings.filter(s => s.key !== 'githubToken' && s.key !== 'gistId');
+            const backup = { version: 3, exportedAt: new Date().toISOString(), students, attendance, holidays, settings: cleanSettings, removedStudents };
             const content = JSON.stringify(backup, null, 2);
 
             try {
@@ -2696,7 +2700,10 @@
                     }
                 }
                 if (backup.holidays?.length) await db.holidays.bulkAdd(stripAutoId(backup.holidays));
-                if (backup.settings?.length) for (const s of backup.settings) await db.settings.put({ key: s.key, value: s.value });
+                if (backup.settings?.length) for (const s of backup.settings) {
+                    if (s.key === 'githubToken' || s.key === 'gistId') continue;
+                    await db.settings.put({ key: s.key, value: s.value });
+                }
                 if (backup.removedStudents?.length) await db.removedStudents.bulkAdd(stripAutoId(backup.removedStudents));
                 alert('✅ Restore from cloud complete!\n\nStudents: ' + backup.students.length + ' | Records: ' + backup.attendance.length + ' | Holidays: ' + (backup.holidays?.length || 0));
                 loadDailyAttendance(); renderStudentManagerList();
@@ -4463,7 +4470,10 @@
                         }
                     }
                     if (backup.holidays?.length) await db.holidays.bulkAdd(stripAutoId(backup.holidays));
-                    if (backup.settings?.length) for (const s of backup.settings) await db.settings.put({ key: s.key, value: s.value });
+                    if (backup.settings?.length) for (const s of backup.settings) {
+                        if (s.key === 'githubToken' || s.key === 'gistId') continue;
+                        await db.settings.put({ key: s.key, value: s.value });
+                    }
                     if (backup.removedStudents?.length) await db.removedStudents.bulkAdd(stripAutoId(backup.removedStudents));
 
                     alert(`✅ Restore complete!\n\nStudents: ${backup.students.length} | Records: ${backup.attendance.length} | Holidays: ${backup.holidays?.length || 0}\n\nBackup from: ${backup.exportedAt ? fmtDateTime(new Date(backup.exportedAt)) : 'unknown'}`);
