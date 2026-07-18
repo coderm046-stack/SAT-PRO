@@ -1036,6 +1036,83 @@
             border-left: 3px solid #6366f1;
         }
 
+        /* ── REMARKS DATE RANGE CARD ──────────────────────────── */
+        .remarks-range-card {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            margin-bottom: 20px;
+            border: 2px solid rgba(139,92,246,0.3);
+            overflow: hidden;
+        }
+        .remarks-range-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            transition: background 0.2s ease;
+        }
+        .remarks-range-header:hover {
+            background: rgba(139,92,246,0.06);
+        }
+        .remarks-range-header h3 {
+            font-size: 18px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0;
+        }
+        .remarks-range-header .toggle-icon {
+            font-size: 14px;
+            color: var(--text-secondary);
+            transition: transform 0.3s ease;
+        }
+        .remarks-range-header.range-open .toggle-icon {
+            transform: rotate(180deg);
+        }
+        .remarks-range-body {
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+            transition: max-height 0.38s cubic-bezier(0.4,0,0.2,1),
+                        opacity 0.28s ease,
+                        padding 0.28s ease;
+            padding: 0 20px;
+        }
+        .remarks-range-body.range-expanded {
+            max-height: 400px;
+            opacity: 1;
+            padding: 0 20px 18px;
+        }
+        .remarks-range-body .range-date-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+        .remarks-range-body .range-date-row label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        .remarks-range-body .range-date-row input[type="date"] {
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 2px solid rgba(139,92,246,0.25);
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 14px;
+            font-family: 'Inter', sans-serif;
+        }
+        .remarks-range-body .range-date-row input[type="date"]:focus {
+            outline: none;
+            border-color: #8b5cf6;
+        }
+
         /* ══════════════════════════════════════════
            CUSTOM CALENDAR — attendance dot indicator
            ══════════════════════════════════════════ */
@@ -2042,6 +2119,36 @@
                 </p>
             </div>
             
+            <!-- ══ REMARKS BY DATE RANGE ══ -->
+            <div class="remarks-range-card">
+                <div class="remarks-range-header" id="remarks-range-header" onclick="toggleRemarksDateRange()">
+                    <h3>
+                        <i class="fas fa-calendar-alt" style="color:#8b5cf6;"></i> Download Remarks by Date Range
+                        <span style="font-size:12px; font-weight:500; color:var(--text-secondary);">Filter by date</span>
+                    </h3>
+                    <i class="fas fa-chevron-down toggle-icon" id="remarks-range-toggle-icon"></i>
+                </div>
+                <div class="remarks-range-body" id="remarks-range-body">
+                    <p style="font-size:13px; color:var(--text-secondary); margin-bottom:14px;">
+                        Select a date range to download remarks only for that period — all students included.
+                    </p>
+                    <div class="range-date-row">
+                        <label>From</label>
+                        <input type="date" id="remarks-date-from">
+                        <label style="margin-left:8px;">To</label>
+                        <input type="date" id="remarks-date-to">
+                    </div>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                        <button onclick="downloadRemarksByDateRangeExcel()" style="padding:10px 18px; background:linear-gradient(135deg,#8b5cf6,#6d28d9); color:white; border:none; border-radius:10px; font-weight:700; font-size:14px; cursor:pointer; display:flex; align-items:center; gap:7px;">
+                            📋 Remarks → Excel
+                        </button>
+                        <button onclick="downloadRemarksByDateRangePDF()" style="padding:10px 18px; background:linear-gradient(135deg,#f97316,#ea580c); color:white; border:none; border-radius:10px; font-weight:700; font-size:14px; cursor:pointer; display:flex; align-items:center; gap:7px;">
+                            📋 Remarks → PDF
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- ══ BACKUP & RESTORE ══ -->
             <div class="backup-restore-section">
                 <h3 style="font-size:18px; font-weight:700; margin-bottom:6px; display:flex; align-items:center; gap:10px;">
@@ -2474,6 +2581,7 @@
             const token = document.getElementById('github-token-input').value.trim();
             if (!token) { alert('Enter your GitHub token first.'); return; }
             await db.settings.put({ key: 'githubToken', value: token });
+            await db.settings.put({ key: 'githubStatus', value: { status: 'none' } });
             document.getElementById('github-token-input').value = '';
             await testGithubToken();
         }
@@ -2485,19 +2593,71 @@
             if (!token) {
                 dot.className = 'dot none';
                 text.textContent = 'No token configured';
+                await db.settings.put({ key: 'githubStatus', value: { status: 'none' } });
                 return;
             }
+
+            let res;
             try {
-                const res = await fetch('https://api.github.com/user', {
+                res = await fetch('https://api.github.com/user', {
                     headers: { 'Authorization': 'token ' + token, 'Accept': 'application/vnd.github.v3+json' }
                 });
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                const user = await res.json();
-                dot.className = 'dot ok';
-                text.textContent = 'Connected as ' + user.login;
-            } catch (e) {
+            } catch (networkErr) {
+                const cached = await db.settings.get('githubStatus');
+                if (cached && cached.value && cached.value.status === 'ok') {
+                    dot.className = 'dot ok';
+                    text.textContent = 'Connected as ' + cached.value.login + ' (cached)';
+                } else {
+                    dot.className = 'dot none';
+                    text.textContent = 'Offline — cannot verify token';
+                }
+                return;
+            }
+
+            if (res.status === 401 || res.status === 403) {
                 dot.className = 'dot err';
                 text.textContent = 'Connection failed — check your token';
+                await db.settings.put({ key: 'githubStatus', value: { status: 'auth_error' } });
+                return;
+            }
+            if (res.status === 429) {
+                const cached = await db.settings.get('githubStatus');
+                if (cached && cached.value && cached.value.status === 'ok') {
+                    dot.className = 'dot ok';
+                    text.textContent = 'Connected as ' + cached.value.login + ' (cached)';
+                } else {
+                    dot.className = 'dot none';
+                    text.textContent = 'Rate limited — try again later';
+                }
+                return;
+            }
+            if (!res.ok) {
+                const cached = await db.settings.get('githubStatus');
+                if (cached && cached.value && cached.value.status === 'ok') {
+                    dot.className = 'dot ok';
+                    text.textContent = 'Connected as ' + cached.value.login + ' (cached)';
+                } else {
+                    dot.className = 'dot err';
+                    text.textContent = 'Connection failed (HTTP ' + res.status + ')';
+                }
+                return;
+            }
+
+            const user = await res.json();
+            dot.className = 'dot ok';
+            text.textContent = 'Connected as ' + user.login;
+            await db.settings.put({ key: 'githubStatus', value: { status: 'ok', login: user.login, lastVerified: new Date().toISOString() } });
+        }
+
+        async function restoreGithubStatusCache() {
+            const cached = await db.settings.get('githubStatus');
+            if (cached && cached.value && cached.value.status === 'ok') {
+                const dot = document.getElementById('github-status-dot');
+                const text = document.getElementById('github-status-text');
+                if (dot && text) {
+                    dot.className = 'dot ok';
+                    text.textContent = 'Connected as ' + cached.value.login + ' (cached)';
+                }
             }
         }
 
@@ -2594,6 +2754,7 @@
             window.addEventListener('resize', handleOrientationChange);
             handleOrientationChange();
             checkAutoBackup();
+            restoreGithubStatusCache();
             testGithubToken();
             const lastSync = await db.settings.get('lastGistSync');
             if (lastSync) document.getElementById('last-gist-sync').textContent = lastSync.value;
@@ -2605,6 +2766,7 @@
             document.getElementById('attendance-month').value = currentMonth;
             // Set date bar label on startup
             updateDateBarLabel(currentDate);
+            initRemarksDateRangeDefaults();
 
             const savedTheme = localStorage.getItem('theme') || 'dark';
             if (savedTheme === 'light') {
@@ -3625,6 +3787,198 @@
 
             } catch (err) {
                 console.error('PDF remarks export error:', err);
+                alert('PDF export failed:\n' + err.message + '\n\nPlease refresh and try again.');
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // REMARKS DATE RANGE — collapsible card controls
+        // ═══════════════════════════════════════════════════════════════
+        let remarksRangeIsOpen = false;
+        function toggleRemarksDateRange() {
+            remarksRangeIsOpen = !remarksRangeIsOpen;
+            const header = document.getElementById('remarks-range-header');
+            const body   = document.getElementById('remarks-range-body');
+            if (remarksRangeIsOpen) {
+                header.classList.add('range-open');
+                body.classList.add('range-expanded');
+            } else {
+                header.classList.remove('range-open');
+                body.classList.remove('range-expanded');
+            }
+        }
+
+        function initRemarksDateRangeDefaults() {
+            const today     = new Date();
+            const firstDay  = new Date(today.getFullYear(), today.getMonth(), 1);
+            const fmt = d => d.toISOString().split('T')[0];
+            const fromEl = document.getElementById('remarks-date-from');
+            const toEl   = document.getElementById('remarks-date-to');
+            if (fromEl) fromEl.value = fmt(firstDay);
+            if (toEl)   toEl.value   = fmt(today);
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // DOWNLOAD REMARKS BY DATE RANGE (Excel)
+        // ═══════════════════════════════════════════════════════════════
+        async function downloadRemarksByDateRangeExcel() {
+            const fromDate = document.getElementById('remarks-date-from').value;
+            const toDate   = document.getElementById('remarks-date-to').value;
+            if (!fromDate || !toDate) { alert('Please select both From and To dates.'); return; }
+            if (fromDate > toDate) { alert('From date must be before or equal to To date.'); return; }
+
+            const students = getSortedStudents(await db.students.toArray());
+            if (!students.length) { alert('No students found.'); return; }
+
+            const allRecords = await db.attendance
+                .where('date').between(fromDate, toDate, true, true)
+                .filter(r => r.remark && r.remark.trim() !== '')
+                .toArray();
+            if (!allRecords.length) { alert('No remarks found in the selected date range.'); return; }
+
+            const byStudent = {};
+            for (const r of allRecords) {
+                if (!byStudent[r.studentId]) byStudent[r.studentId] = [];
+                byStudent[r.studentId].push(r);
+            }
+
+            const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+            const headerRow = ['Roll No','Student Name','Gender','Date','Day','Status','Remark'];
+            const data = [headerRow];
+
+            for (const student of students) {
+                const records = byStudent[student.id] || [];
+                if (!records.length) continue;
+                records.sort((a, b) => b.date.localeCompare(a.date));
+                for (const r of records) {
+                    const d = new Date(r.date + 'T00:00:00');
+                    const day = days[d.getDay()];
+                    const dd = String(d.getDate()).padStart(2,'0');
+                    const mm = String(d.getMonth()+1).padStart(2,'0');
+                    const yyyy = d.getFullYear();
+                    const dateLabel = `${dd}-${mm}-${yyyy}`;
+                    const status = r.status === 'present' ? 'Present' : r.status === 'absent' ? 'Absent' : '-';
+                    data.push([student.rollNo, student.name, student.gender, dateLabel, day, status, r.remark]);
+                }
+            }
+
+            if (data.length === 1) { alert('No remarks found.'); return; }
+
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            ws['!cols'] = [{wch:10},{wch:28},{wch:10},{wch:14},{wch:8},{wch:12},{wch:40}];
+            const headerRange = XLSX.utils.decode_range(ws['!ref']);
+            for (let c = headerRange.s.c; c <= headerRange.e.c; c++) {
+                const addr = XLSX.utils.encode_cell({r:0, c});
+                if (ws[addr]) ws[addr].s = { font:{bold:true, color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'7C3AED'}}, alignment:{horizontal:'center'} };
+            }
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Remarks Range');
+            XLSX.writeFile(wb, `Remarks_${fromDate}_to_${toDate}.xlsx`);
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // DOWNLOAD REMARKS BY DATE RANGE (PDF)
+        // ═══════════════════════════════════════════════════════════════
+        async function downloadRemarksByDateRangePDF() {
+            const fromDate = document.getElementById('remarks-date-from').value;
+            const toDate   = document.getElementById('remarks-date-to').value;
+            if (!fromDate || !toDate) { alert('Please select both From and To dates.'); return; }
+            if (fromDate > toDate) { alert('From date must be before or equal to To date.'); return; }
+
+            try {
+                let JsPDF = null;
+                if (window.jspdf && typeof window.jspdf.jsPDF === 'function') {
+                    JsPDF = window.jspdf.jsPDF;
+                } else if (typeof window.jsPDF === 'function') {
+                    JsPDF = window.jsPDF;
+                } else if (window.jsPDF && typeof window.jsPDF.jsPDF === 'function') {
+                    JsPDF = window.jsPDF.jsPDF;
+                }
+                if (!JsPDF) { alert('PDF library not loaded yet. Please wait a moment and try again.'); return; }
+
+                const doc = new JsPDF('p', 'mm', 'a4');
+                if (typeof doc.autoTable !== 'function') {
+                    alert('PDF table plugin (AutoTable) not loaded. Please refresh the page and try again.'); return;
+                }
+
+                const students = getSortedStudents(await db.students.toArray());
+                if (!students.length) { alert('No students found.'); return; }
+
+                const allRecords = await db.attendance
+                    .where('date').between(fromDate, toDate, true, true)
+                    .filter(r => r.remark && r.remark.trim() !== '')
+                    .toArray();
+                if (!allRecords.length) { alert('No remarks found in the selected date range.'); return; }
+
+                const byStudent = {};
+                for (const r of allRecords) {
+                    if (!byStudent[r.studentId]) byStudent[r.studentId] = [];
+                    byStudent[r.studentId].push(r);
+                }
+
+                const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                const tableData = [];
+                const studentNames = [];
+
+                for (const student of students) {
+                    const records = byStudent[student.id] || [];
+                    if (!records.length) continue;
+                    records.sort((a, b) => b.date.localeCompare(a.date));
+                    studentNames.push(student);
+                    for (const r of records) {
+                        const d = new Date(r.date + 'T00:00:00');
+                        const day = days[d.getDay()];
+                        const dd = String(d.getDate()).padStart(2,'0');
+                        const mm = String(d.getMonth()+1).padStart(2,'0');
+                        const yyyy = d.getFullYear();
+                        const dateLabel = `${dd}-${mm}-${yyyy}`;
+                        const status = r.status === 'present' ? 'Present' : r.status === 'absent' ? 'Absent' : '-';
+                        tableData.push([student.rollNo, student.name, student.gender, dateLabel, day, status, r.remark]);
+                    }
+                }
+
+                if (!tableData.length) { alert('No remarks found.'); return; }
+
+                const headers = [['Roll No','Student Name','Gender','Date','Day','Status','Remark']];
+                const pageW = doc.internal.pageSize.getWidth();
+                const today = new Date();
+                const todayStr = `${String(today.getDate()).padStart(2,'0')}-${String(today.getMonth()+1).padStart(2,'0')}-${today.getFullYear()}`;
+
+                doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
+                doc.text('Remarks Report — ' + fromDate + ' to ' + toDate, 14, 14);
+                doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 100, 100);
+                doc.text(`Generated: ${todayStr}  |  Total remarks: ${tableData.length}  |  Total students: ${studentNames.length}`, 14, 20);
+
+                doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.3);
+                doc.line(14, 23, pageW - 14, 23);
+                doc.setTextColor(0, 0, 0);
+
+                doc.autoTable({
+                    head: headers,
+                    body: tableData,
+                    startY: 26,
+                    theme: 'grid',
+                    styles: { fontSize: 7, cellPadding: 1.5, halign: 'center', valign: 'middle', overflow: 'linebreak' },
+                    headStyles: { fillColor: [124, 58, 237], fontStyle: 'bold', fontSize: 7, halign: 'center' },
+                    columnStyles: {
+                        0: { cellWidth: 14, halign: 'center' },
+                        1: { cellWidth: 28, halign: 'left' },
+                        2: { cellWidth: 14, halign: 'center' },
+                        3: { cellWidth: 18, halign: 'center' },
+                        4: { cellWidth: 12, halign: 'center' },
+                        5: { cellWidth: 14, halign: 'center' },
+                        6: { cellWidth: 'auto', halign: 'left' }
+                    },
+                    didParseCell(data) {
+                        if (data.row.section !== 'body') return;
+                        if (data.column.index === 6) data.cell.styles.halign = 'left';
+                    }
+                });
+
+                doc.save(`Remarks_${fromDate}_to_${toDate}.pdf`);
+
+            } catch (err) {
+                console.error('PDF date-range remarks export error:', err);
                 alert('PDF export failed:\n' + err.message + '\n\nPlease refresh and try again.');
             }
         }
