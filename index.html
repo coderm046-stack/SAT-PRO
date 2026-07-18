@@ -405,6 +405,18 @@
             color: var(--text-secondary);
             font-weight: 400;
         }
+
+        .daily-mark-btn.absent-filter {
+            background: rgba(244,67,54,0.1);
+            color: #ef4444;
+            border: 2px solid rgba(244,67,54,0.25);
+        }
+        .daily-mark-btn.absent-filter.active {
+            background: #ef4444;
+            color: white;
+            border-color: #ef4444;
+        }
+        .daily-student-card.hidden { display: none; }
         
         /* ORIGINAL DESIGN FOR OTHER TABS */
         .container {
@@ -1809,6 +1821,9 @@
             <button class="daily-mark-btn" style="color: #e53935; font-size: 12px;" onclick="clearAllToday()">
                 &#x1F5D1; CLEAR ALL
             </button>
+            <button class="daily-mark-btn absent-filter" id="absent-filter-btn" onclick="toggleAbsentFilter()">
+                &#x1F441; SHOW ABSENT ONLY
+            </button>
         </div>
 
         <div class="daily-student-list" id="student-list">
@@ -3165,6 +3180,9 @@
                 else if (attendance?.status === 'absent') { genderClass === 'male' ? boysA++ : girlsA++; }
             }
             updateDailyStats(boysP, girlsP, boysA, girlsA);
+            if (document.getElementById('absent-filter-btn').classList.contains('active')) {
+                applyAbsentFilter();
+            }
         }
 
         function updateDailyStatsFromDOM() {
@@ -3205,6 +3223,29 @@
             }
             updateDailyStatsFromDOM();
             refreshCalendarDots();
+            if (document.getElementById('absent-filter-btn').classList.contains('active')) {
+                applyAbsentFilter();
+            }
+        }
+
+        function toggleAbsentFilter() {
+            const btn = document.getElementById('absent-filter-btn');
+            btn.classList.toggle('active');
+            if (btn.classList.contains('active')) {
+                btn.textContent = '\u{1F441} SHOW ALL';
+                applyAbsentFilter();
+            } else {
+                btn.textContent = '\u{1F441} SHOW ABSENT ONLY';
+                document.querySelectorAll('.daily-student-card').forEach(c => c.classList.remove('hidden'));
+            }
+        }
+
+        function applyAbsentFilter() {
+            document.querySelectorAll('.daily-student-card').forEach(c => {
+                const isAbsent = c.querySelector('.absent-btn').classList.contains('active');
+                const isPresent = c.querySelector('.present-btn').classList.contains('active');
+                c.classList.toggle('hidden', !isAbsent && isPresent);
+            });
         }
 
         async function saveRemark(studentId, remark) {
@@ -3230,6 +3271,9 @@
             }
             updateDailyStatsFromDOM();
             refreshCalendarDots();
+            if (document.getElementById('absent-filter-btn').classList.contains('active')) {
+                applyAbsentFilter();
+            }
         }
 
         async function clearAllToday() {
