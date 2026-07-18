@@ -2456,6 +2456,13 @@
             }
         }
 
+        function fmtDate(d) {
+            return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+        }
+        function fmtDateTime(d) {
+            return fmtDate(d) + ', ' + d.toLocaleTimeString();
+        }
+
         // ═══════════════════════════════════════════════════════════════
         // APP STATE & INIT
         // ═══════════════════════════════════════════════════════════════
@@ -2498,7 +2505,7 @@
                 if (!entry) return;
                 const backup = JSON.parse(entry.value);
                 document.querySelector('#auto-backup-banner .backup-timestamp').textContent =
-                    backup.exportedAt ? new Date(backup.exportedAt).toLocaleString() : 'unknown date';
+                    backup.exportedAt ? fmtDateTime(new Date(backup.exportedAt)) : 'unknown date';
                 document.getElementById('auto-backup-banner').style.display = 'flex';
             } catch (e) { /* silent */ }
         }
@@ -2544,7 +2551,7 @@
                 if (backup.holidays?.length) await db.holidays.bulkAdd(stripAutoId(backup.holidays));
                 if (backup.settings?.length) for (const s of backup.settings) await db.settings.put({ key: s.key, value: s.value });
                 if (backup.removedStudents?.length) await db.removedStudents.bulkAdd(stripAutoId(backup.removedStudents));
-                alert(`✅ Restore complete!\n\nStudents: ${backup.students.length} | Records: ${backup.attendance.length} | Holidays: ${backup.holidays?.length || 0}\n\nBackup from: ${backup.exportedAt ? new Date(backup.exportedAt).toLocaleString() : 'unknown'}`);
+                alert(`✅ Restore complete!\n\nStudents: ${backup.students.length} | Records: ${backup.attendance.length} | Holidays: ${backup.holidays?.length || 0}\n\nBackup from: ${backup.exportedAt ? fmtDateTime(new Date(backup.exportedAt)) : 'unknown'}`);
                 loadDailyAttendance(); renderStudentManagerList();
                 dismissAutoBackup();
             } catch (e) { alert('❌ Restore failed: ' + e.message); }
@@ -2642,7 +2649,7 @@
                 if (!gistId) {
                     await db.settings.put({ key: 'gistId', value: gist.id });
                 }
-                const now = new Date().toLocaleString();
+                const now = fmtDateTime(new Date());
                 await db.settings.put({ key: 'lastGistSync', value: now });
                 document.getElementById('last-gist-sync').textContent = now;
                 if (!silent) alert('✅ Synced to cloud! Backup saved to your private GitHub Gist.');
@@ -2874,8 +2881,10 @@
             if (!dateStr) return '';
             const d = new Date(dateStr + 'T00:00:00');
             const days  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-            return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} (${days[d.getDay()]})`;
+            const dd = String(d.getDate()).padStart(2,'0');
+            const mm = String(d.getMonth()+1).padStart(2,'0');
+            const yyyy = d.getFullYear();
+            return `${dd}/${mm}/${yyyy} (${days[d.getDay()]})`;
         }
 
         function updateDateBarLabel(dateStr) {
@@ -3415,12 +3424,13 @@
                     const groupAll = (await db.holidays.where('groupId').equals(h.groupId).toArray()).sort((a,b)=>a.date.localeCompare(b.date));
                     groupAll.forEach(x => rendered.add(x.id));
                     const f = new Date(groupAll[0].date+'T00:00:00'), l = new Date(groupAll[groupAll.length-1].date+'T00:00:00');
-                    const fL = `${f.getDate()} ${months[f.getMonth()]} ${f.getFullYear()}`, lL = `${l.getDate()} ${months[l.getMonth()]} ${l.getFullYear()}`;
+                    const fmtHM = x => `${String(x.getDate()).padStart(2,'0')}/${String(x.getMonth()+1).padStart(2,'0')}/${x.getFullYear()}`;
+                    const fL = fmtHM(f), lL = fmtHM(l);
                     chips.push(`<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.5);color:var(--text-primary);padding:6px 12px;border-radius:20px;font-size:13px;font-weight:600;"><span style="font-size:16px;">🏖️</span>${fL === lL ? fL : `${fL} to ${lL}`} – ${h.name} <span style="font-size:10px;opacity:0.7;">(${groupAll.length}d)</span><button onclick="removeHoliday(${h.id},'${h.groupId}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:16px;line-height:1;padding:0 0 0 4px;font-weight:700;">&times;</button></span>`);
                 } else {
                     rendered.add(h.id);
                     const d = new Date(h.date+'T00:00:00');
-                    chips.push(`<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);color:var(--text-primary);padding:6px 12px;border-radius:20px;font-size:13px;font-weight:600;"><span style="font-size:16px;">📅</span>${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} – ${h.name}<button onclick="removeHoliday(${h.id},null)" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:16px;line-height:1;padding:0 0 0 4px;font-weight:700;">&times;</button></span>`);
+                    chips.push(`<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);color:var(--text-primary);padding:6px 12px;border-radius:20px;font-size:13px;font-weight:600;"><span style="font-size:16px;">📅</span>${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} – ${h.name}<button onclick="removeHoliday(${h.id},null)" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:16px;line-height:1;padding:0 0 0 4px;font-weight:700;">&times;</button></span>`);
                 }
             }
             container.innerHTML = chips.join('');
@@ -3561,7 +3571,7 @@
 
             const aoa = [
                 ['Removed Students Report'],
-                [`Generated: ${new Date().toLocaleString()}`],
+                [`Generated: ${fmtDateTime(new Date())}`],
                 [],
                 ['#', 'Roll No', 'Student Name', 'Gender', 'Attendance Records Removed', 'Removed On'],
                 ...removed.map((s, i) => [
@@ -3570,7 +3580,7 @@
                     s.name,
                     s.gender || '',
                     s.attendanceRecordsRemoved ?? 0,
-                    new Date(s.removedAt).toLocaleString()
+                    fmtDateTime(new Date(s.removedAt))
                 ])
             ];
             const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -3620,7 +3630,7 @@
                     const dd = String(d.getDate()).padStart(2,'0');
                     const mm = String(d.getMonth()+1).padStart(2,'0');
                     const yyyy = d.getFullYear();
-                    const dateLabel = `${dd}-${mm}-${yyyy}`;
+                    const dateLabel = `${dd}/${mm}/${yyyy}`;
                     const status = r.status === 'present' ? 'Present' : r.status === 'absent' ? 'Absent' : '-';
                     data.push([student.rollNo, student.name, student.gender, dateLabel, day, status, r.remark]);
                 }
@@ -3692,7 +3702,7 @@
                         const dd = String(d.getDate()).padStart(2,'0');
                         const mm = String(d.getMonth()+1).padStart(2,'0');
                         const yyyy = d.getFullYear();
-                        const dateLabel = `${dd}-${mm}-${yyyy}`;
+                        const dateLabel = `${dd}/${mm}/${yyyy}`;
                         const status = r.status === 'present' ? 'Present' : r.status === 'absent' ? 'Absent' : '-';
                         tableData.push([student.rollNo, student.name, student.gender, dateLabel, day, status, r.remark]);
                     }
@@ -3704,7 +3714,7 @@
 
                 const pageW = doc.internal.pageSize.getWidth();
                 const today = new Date();
-                const todayStr = `${String(today.getDate()).padStart(2,'0')}-${String(today.getMonth()+1).padStart(2,'0')}-${today.getFullYear()}`;
+                const todayStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
 
                 doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
                 doc.text('All Student Remarks Report', 14, 14);
@@ -3785,7 +3795,7 @@
                     const dd = String(d.getDate()).padStart(2,'0');
                     const mm = String(d.getMonth()+1).padStart(2,'0');
                     const yyyy = d.getFullYear();
-                    const dateLabel = `${dd}-${mm}-${yyyy}`;
+                    const dateLabel = `${dd}/${mm}/${yyyy}`;
                     const status = r.status === 'present' ? 'Present' : r.status === 'absent' ? 'Absent' : '-';
                     data.push([student.rollNo, student.name, student.gender, dateLabel, day, status, r.remark]);
                 }
@@ -3860,7 +3870,7 @@
                         const dd = String(d.getDate()).padStart(2,'0');
                         const mm = String(d.getMonth()+1).padStart(2,'0');
                         const yyyy = d.getFullYear();
-                        const dateLabel = `${dd}-${mm}-${yyyy}`;
+                        const dateLabel = `${dd}/${mm}/${yyyy}`;
                         const status = r.status === 'present' ? 'Present' : r.status === 'absent' ? 'Absent' : '-';
                         tableData.push([student.rollNo, student.name, student.gender, dateLabel, day, status, r.remark]);
                     }
@@ -3871,7 +3881,7 @@
                 const headers = [['Roll No','Student Name','Gender','Date','Day','Status','Remark']];
                 const pageW = doc.internal.pageSize.getWidth();
                 const today = new Date();
-                const todayStr = `${String(today.getDate()).padStart(2,'0')}-${String(today.getMonth()+1).padStart(2,'0')}-${today.getFullYear()}`;
+                const todayStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
 
                 doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
                 doc.text('Remarks Report — ' + fromDate + ' to ' + toDate, 14, 14);
@@ -4455,7 +4465,7 @@
                     if (backup.settings?.length) for (const s of backup.settings) await db.settings.put({ key: s.key, value: s.value });
                     if (backup.removedStudents?.length) await db.removedStudents.bulkAdd(stripAutoId(backup.removedStudents));
 
-                    alert(`✅ Restore complete!\n\nStudents: ${backup.students.length} | Records: ${backup.attendance.length} | Holidays: ${backup.holidays?.length || 0}\n\nBackup from: ${backup.exportedAt ? new Date(backup.exportedAt).toLocaleString() : 'unknown'}`);
+                    alert(`✅ Restore complete!\n\nStudents: ${backup.students.length} | Records: ${backup.attendance.length} | Holidays: ${backup.holidays?.length || 0}\n\nBackup from: ${backup.exportedAt ? fmtDateTime(new Date(backup.exportedAt)) : 'unknown'}`);
                     loadDailyAttendance(); renderStudentManagerList();
                 } catch (err) { alert('❌ Restore failed: ' + err.message); }
             };
@@ -5375,7 +5385,7 @@
   </div>
   <div class="summary-cell">
     <div class="s-label">Report Generated</div>
-    <div class="s-value" style="font-size:9.5pt;margin-top:4px;">${new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>
+    <div class="s-value" style="font-size:9.5pt;margin-top:4px;">${fmtDate(new Date())}</div>
   </div>
 </div>
 
@@ -5395,7 +5405,7 @@
 
 <!-- Footer -->
 <div class="report-footer">
-  <span>Printed on: ${new Date().toLocaleString('en-IN')}</span>
+  <span>Printed on: ${fmtDateTime(new Date())}</span>
   <span>Confidential — For School Use Only</span>
 </div>
 <div class="sign-line">
