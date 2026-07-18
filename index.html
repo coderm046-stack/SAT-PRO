@@ -1849,11 +1849,15 @@
             </div>
 
             <!-- ══ HOLIDAY MANAGER ══ -->
-            <div style="background: var(--bg-secondary); border-radius: 16px; padding: 20px; margin-bottom: 20px; border: 2px solid rgba(59,130,246,0.3); box-shadow: 0 4px 16px rgba(0,0,0,0.15);">
-                <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 4px; display:flex; align-items:center; gap:10px;">
-                    <span style="font-size:24px;">📅</span> Holiday Manager
-                    <span style="font-size:12px; font-weight:500; color:var(--text-secondary); margin-left:4px;">Excluded from attendance % calculation</span>
-                </h3>
+            <div class="setup-collapse-card" style="border-color: rgba(59,130,246,0.3);">
+                <div class="setup-collapse-header" id="monthly-holiday-header" onclick="toggleSetupCard('monthly-holiday')">
+                    <h3>
+                        <span style="font-size:24px;">📅</span> Holiday Manager
+                        <span style="font-size:12px; font-weight:500; color:var(--text-secondary); margin-left:4px;">Excluded from attendance % calculation</span>
+                    </h3>
+                    <i class="fas fa-chevron-down toggle-arrow"></i>
+                </div>
+                <div class="setup-collapse-body open" id="monthly-holiday-body">
                 <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; margin-top:14px;">
                     <div style="flex:1; min-width:140px;">
                         <label style="font-size:12px; color:var(--text-secondary); font-weight:600; display:block; margin-bottom:6px;">Holiday Date:</label>
@@ -1917,6 +1921,7 @@
                         🚫 Total Holidays: <span id="total-holidays-display" style="color:#f87171;">—</span>
                         <span style="font-size:11px; font-weight:400; color:var(--text-secondary);"> (manual + Sundays)</span>
                     </div>
+                </div>
                 </div>
             </div>
 
