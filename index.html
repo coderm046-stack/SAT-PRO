@@ -1025,6 +1025,57 @@
             color: #fff;
         }
 
+        /* ── COLLAPSIBLE SETUP CARDS ──────────────────────────── */
+        .setup-collapse-card {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            margin-bottom: 20px;
+            border: 2px solid rgba(255,255,255,0.08);
+            overflow: hidden;
+        }
+        .setup-collapse-card.accent-green  { border-color: rgba(16,185,129,0.3); }
+        .setup-collapse-card.accent-indigo { border-color: rgba(99,102,241,0.3); }
+        .setup-collapse-card.accent-emerald { border-color: rgba(110,231,183,0.3); }
+        .setup-collapse-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.2s ease;
+        }
+        .setup-collapse-header:hover { background: rgba(255,255,255,0.03); }
+        .setup-collapse-header h3 {
+            font-size: 18px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0;
+        }
+        .setup-collapse-header .toggle-arrow {
+            font-size: 14px;
+            color: var(--text-secondary);
+            transition: transform 0.3s ease;
+        }
+        .setup-collapse-header.open .toggle-arrow { transform: rotate(180deg); }
+        .setup-collapse-body {
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+            transition: max-height 0.38s cubic-bezier(0.4,0,0.2,1),
+                        opacity 0.28s ease,
+                        padding 0.28s ease;
+            padding: 0 20px;
+        }
+        .setup-collapse-body.open {
+            max-height: 2000px;
+            opacity: 1;
+            padding: 0 20px 18px;
+        }
+        .setup-collapse-body .upload-zone { margin-bottom: 0; }
+
         .backup-note {
             margin-top: 12px;
             padding: 10px 14px;
@@ -1982,26 +2033,40 @@
                 <h1 style="font-size:24px; font-weight:800; color:white;"><i class="fas fa-cog"></i> Setup & Students</h1>
                 <p style="opacity:0.9; font-size:14px; margin-top:4px; color:white;">Manage student data and app configuration</p>
             </div>
-            <div class="upload-zone" onclick="document.getElementById('excel-upload').click()">
-                <i class="fas fa-cloud-upload-alt"></i>
-                <h3 style="font-size: 20px; margin-bottom: 8px;">Upload Excel File</h3>
-                <p style="color: var(--text-secondary);">Click to select an Excel file with student data</p>
-                <p style="color: var(--text-secondary); font-size: 12px; margin-top: 8px;">
-                    Required columns: Roll No, Student Name, Gender
-                </p>
+            <div class="setup-collapse-card accent-green">
+                <div class="setup-collapse-header" id="setup-upload-header" onclick="toggleSetupCard('setup-upload')">
+                    <h3>
+                        <i class="fas fa-cloud-upload-alt" style="color:#10b981;"></i> Upload Excel File
+                        <span style="font-size:12px; font-weight:500; color:var(--text-secondary);">Import student data</span>
+                    </h3>
+                    <i class="fas fa-chevron-down toggle-arrow"></i>
+                </div>
+                <div class="setup-collapse-body" id="setup-upload-body">
+                    <div class="upload-zone" onclick="document.getElementById('excel-upload').click()">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <h3 style="font-size: 20px; margin-bottom: 8px;">Upload Excel File</h3>
+                        <p style="color: var(--text-secondary);">Click to select an Excel file with student data</p>
+                        <p style="color: var(--text-secondary); font-size: 12px; margin-top: 8px;">
+                            Required columns: Roll No, Student Name, Gender
+                        </p>
+                    </div>
+                    <input type="file" id="excel-upload" accept=".xlsx,.xls,.csv" onchange="handleExcelUpload(event)">
+                    <button class="btn btn-danger" onclick="clearAllData()" style="width: 100%; margin-top: 12px;">
+                        <i class="fas fa-trash-alt"></i> Clear All Data
+                    </button>
+                </div>
             </div>
-            <input type="file" id="excel-upload" accept=".xlsx,.xls,.csv" onchange="handleExcelUpload(event)">
-            
-            <button class="btn btn-danger" onclick="clearAllData()" style="width: 100%; margin-bottom: 20px;">
-                <i class="fas fa-trash-alt"></i> Clear All Data
-            </button>
 
             <!-- ══ STUDENT MANAGER ══ -->
-            <div style="background: var(--bg-secondary); border-radius: 16px; padding: 20px; margin-bottom: 20px; border: 2px solid rgba(16,185,129,0.3);">
-                <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px; display:flex; align-items:center; gap:10px;">
-                    <i class="fas fa-user-plus" style="color:#10b981;"></i> Add / Remove Students
-                    <span style="font-size:12px; font-weight:500; color:var(--text-secondary);">Works alongside Excel upload</span>
-                </h3>
+            <div class="setup-collapse-card accent-green">
+                <div class="setup-collapse-header" id="setup-students-header" onclick="toggleSetupCard('setup-students')">
+                    <h3>
+                        <i class="fas fa-user-plus" style="color:#10b981;"></i> Add / Remove Students
+                        <span style="font-size:12px; font-weight:500; color:var(--text-secondary);">Works alongside Excel upload</span>
+                    </h3>
+                    <i class="fas fa-chevron-down toggle-arrow"></i>
+                </div>
+                <div class="setup-collapse-body" id="setup-students-body">
                 <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
                     <input type="text" id="new-roll" placeholder="Roll No" style="flex:1; min-width:80px; padding:10px; border-radius:10px; border:2px solid rgba(255,255,255,0.1); background:var(--bg-tertiary); color:var(--text-primary); font-size:14px;">
                     <input type="text" id="new-name" placeholder="Student Name" style="flex:3; min-width:140px; padding:10px; border-radius:10px; border:2px solid rgba(255,255,255,0.1); background:var(--bg-tertiary); color:var(--text-primary); font-size:14px;">
@@ -2040,14 +2105,19 @@
                 <p style="margin-top:10px; font-size:12px; color:var(--text-secondary);">
                     💾 Students saved to IndexedDB (persists in this browser). Upload Excel to bulk-import, or add individually above.
                 </p>
+                </div>
             </div>
             
             <!-- ══ BACKUP & RESTORE ══ -->
-            <div class="backup-restore-section">
-                <h3 style="font-size:18px; font-weight:700; margin-bottom:6px; display:flex; align-items:center; gap:10px;">
-                    <i class="fas fa-shield-alt" style="color:#6366f1;"></i> Backup &amp; Restore
-                    <span style="font-size:12px; font-weight:500; color:var(--text-secondary);">Protect your data</span>
-                </h3>
+            <div class="setup-collapse-card accent-indigo">
+                <div class="setup-collapse-header" id="setup-backup-header" onclick="toggleSetupCard('setup-backup')">
+                    <h3>
+                        <i class="fas fa-shield-alt" style="color:#6366f1;"></i> Backup &amp; Restore
+                        <span style="font-size:12px; font-weight:500; color:var(--text-secondary);">Protect your data</span>
+                    </h3>
+                    <i class="fas fa-chevron-down toggle-arrow"></i>
+                </div>
+                <div class="setup-collapse-body" id="setup-backup-body">
                 <p style="font-size:13px; color:var(--text-secondary); margin-bottom:16px;">
                     Save all students, attendance records and holidays to a file on your device. Restore anytime — even after clearing browser data.
                 </p>
@@ -2063,30 +2133,32 @@
                 <div class="backup-note">
                     💡 <strong>Backup</strong> saves a <code>.json</code> file to your Downloads. <strong>Restore</strong> loads that file back — existing data will be replaced. Keep your backup file safe (Google Drive, WhatsApp, USB, etc.).
                 </div>
+                </div>
             </div>
 
             <!-- ══ GITHUB CLOUD BACKUP ══ -->
-            <div class="github-cloud-section">
-                <h3 style="font-size:18px; font-weight:700; margin-bottom:6px; display:flex; align-items:center; gap:10px;">
-                    <i class="fab fa-github" style="color:#10b981;"></i> GitHub Cloud Backup
-                    <span style="font-size:12px; font-weight:500; color:var(--text-secondary);">Auto-sync to cloud</span>
-                </h3>
+            <div class="setup-collapse-card accent-emerald">
+                <div class="setup-collapse-header" id="setup-github-header" onclick="toggleSetupCard('setup-github')">
+                    <h3>
+                        <i class="fab fa-github" style="color:#10b981;"></i> GitHub Cloud Backup
+                        <span style="font-size:12px; font-weight:500; color:var(--text-secondary);">Auto-sync to cloud</span>
+                    </h3>
+                    <i class="fas fa-chevron-down toggle-arrow"></i>
+                </div>
+                <div class="setup-collapse-body" id="setup-github-body">
                 <p style="font-size:13px; color:var(--text-secondary); margin-bottom:14px;">
                     Your data is automatically backed up to a <strong>private GitHub Gist</strong> every time you close the app. 
                     On next open, you can restore with one click — from any device.
                 </p>
-
                 <div class="github-token-input-wrap">
                     <input type="password" id="github-token-input" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" spellcheck="false">
                     <button class="github-btn do-save-token" onclick="saveGithubToken()"><i class="fas fa-save"></i> Save Token</button>
                     <button class="github-btn do-test" onclick="testGithubToken()"><i class="fas fa-plug"></i> Test</button>
                 </div>
-
                 <div class="github-token-status" id="github-token-status">
                     <span class="dot none" id="github-status-dot"></span>
                     <span id="github-status-text">No token configured</span>
                 </div>
-
                 <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">
                     <button class="github-btn do-sync" onclick="syncToGist()">
                         <i class="fas fa-cloud-upload-alt"></i> Sync to Cloud
@@ -2098,12 +2170,17 @@
                 <div style="font-size:12px; color:var(--text-secondary); margin-top:10px;">
                     <i class="fas fa-history"></i> Last sync: <span id="last-gist-sync">Never</span>
                 </div>
+                </div>
             </div>
 
-            <div style="background: var(--bg-secondary); padding: 20px; border-radius: 12px; margin-bottom: 16px;">
-                <h3 style="margin-bottom: 12px; font-size: 18px; font-weight: 700;">
-                    <i class="fas fa-info-circle"></i> Instructions
-                </h3>
+            <div class="setup-collapse-card">
+                <div class="setup-collapse-header" id="setup-instructions-header" onclick="toggleSetupCard('setup-instructions')">
+                    <h3>
+                        <i class="fas fa-info-circle" style="color:#60a5fa;"></i> Instructions
+                    </h3>
+                    <i class="fas fa-chevron-down toggle-arrow"></i>
+                </div>
+                <div class="setup-collapse-body" id="setup-instructions-body">
                 <ul style="color: var(--text-secondary); font-size: 14px; line-height: 1.8; padding-left: 20px;">
                     <li>Upload an Excel or CSV file with columns: <strong>Roll No</strong>, <strong>Student Name</strong>, <strong>Gender</strong></li>
                     <li>Gender should be "Male" or "Female"</li>
@@ -2113,6 +2190,7 @@
                     <li>Data is saved automatically to your device (IndexedDB)</li>
                     <li>Remarks are useful for noting if a student leaves early</li>
                 </ul>
+                </div>
             </div>
             
         </div>
@@ -2453,6 +2531,15 @@
 
         function dismissAutoBackup() {
             document.getElementById('auto-backup-banner').style.display = 'none';
+        }
+
+        function toggleSetupCard(id) {
+            const body = document.getElementById(id + '-body');
+            const header = document.getElementById(id + '-header');
+            if (!body || !header) return;
+            const open = body.classList.contains('open');
+            body.classList.toggle('open');
+            header.classList.toggle('open');
         }
 
         // ═══════════════════════════════════════════════════════════════
